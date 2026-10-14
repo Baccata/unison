@@ -26,10 +26,9 @@ module Unison.Runtime.Foreign.Callback
 where
 
 import Control.Exception (Exception, throwIO)
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Data.IORef
 import Data.Int
-import Data.Map.Strict qualified as Map
 import Data.Word
 import Foreign.C.Types (CSize (..))
 import Foreign.ForeignPtr (withForeignPtr)
@@ -115,13 +114,6 @@ sharedEntry :: FunPtr CallbackEntry
 sharedEntry = unsafePerformIO (wrapCallbackEntry callbackEntry)
 {-# NOINLINE sharedEntry #-}
 
--- Teardown actions for live callbacks, keyed by their executable code pointer
--- (which is what a resulting 'CDynFunc' carries). This lets 'freeCallback'
--- recover the writable closure and stable pointer from the 'CDynFunc' alone.
-callbackRegistry :: IORef (Map.Map (Ptr ()) (IO ()))
-callbackRegistry = unsafePerformIO (newIORef Map.empty)
-{-# NOINLINE callbackRegistry #-}
-
 -- | Build a C-callable function pointer from a Unison function. The 'FFSpec'
 -- describes the C signature; @run@ applies the Unison function to the decoded
 -- arguments. The result is a 'CDynFunc' (so it flows through the same paths as
@@ -148,21 +140,23 @@ mkCallback spec0 run = do
       ffi_closure_free writable
       freeStablePtr sp
       throwIO BadClosureInit
-    let teardown = do
-          ffi_closure_free writable
-          freeStablePtr sp
-          atomicModifyIORef' callbackRegistry \m -> (Map.delete code m, ())
-    atomicModifyIORef' callbackRegistry \m -> (Map.insert code teardown m, ())
-    pure $ CDynFunc "<callback>" cspec (castPtrToFunPtr code)
+    -- The teardown is carried on the function value itself (see
+    -- 'Unison.Runtime.Foreign.Dynamic.cFinalize'), so 'freeCallback' needs no
+    -- global or runtime-threaded registry. The flag makes a double free safe.
+    freedRef <- newIORef False
+    let finalize = do
+          firstTime <- atomicModifyIORef' freedRef \freed -> (True, not freed)
+          when firstTime do
+            ffi_closure_free writable
+            freeStablePtr sp
+    pure $ CDynFunc "<callback>" cspec (castPtrToFunPtr code) finalize
 
 -- | Release a callback created by 'mkCallback': frees the libffi closure and
--- drops the reference keeping the Unison function alive. A no-op if the
--- 'CDynFunc' is not a live callback (e.g. a DLL symbol, or already freed).
+-- drops the reference keeping the Unison function alive. Safe to call more
+-- than once, and a no-op on a 'CDynFunc' that is not a callback (e.g. a DLL
+-- symbol, whose finalizer is @pure ()@).
 freeCallback :: CDynFunc -> IO ()
-freeCallback (CDynFunc _ _ f) = do
-  let code = castFunPtrToPtr f
-  mteardown <- atomicModifyIORef' callbackRegistry \m -> (m, Map.lookup code m)
-  sequence_ mteardown
+freeCallback = cFinalize
 
 checkArgType :: FFType -> IO ()
 checkArgType t

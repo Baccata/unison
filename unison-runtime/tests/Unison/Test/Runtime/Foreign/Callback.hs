@@ -72,5 +72,12 @@ test =
           r <- call2 cb (1.5 :: Float) (2.25 :: Float) :: IO Float
           freeCallback cb
           pure r
-        expectEqual 3.75 r
+        expectEqual 3.75 r,
+      scope "freeCallback is idempotent" do
+        ok <- io do
+          cb <- callbackFor (FFSpec [U64] U64 Nothing) "x -> ##Nat.increment x"
+          freeCallback cb
+          freeCallback cb
+          pure True
+        expect ok
     ]
