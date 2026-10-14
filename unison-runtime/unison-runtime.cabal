@@ -205,6 +205,7 @@ test-suite runtime-tests
       Unison.Test.Gen
       Unison.Test.Runtime.ANF
       Unison.Test.Runtime.ANF.Serialization
+      Unison.Test.Runtime.ApplyArgs
       Unison.Test.Runtime.Crypto.P256
       Unison.Test.Runtime.Crypto.Rsa
       Unison.Test.Runtime.Foreign.Dynamic
