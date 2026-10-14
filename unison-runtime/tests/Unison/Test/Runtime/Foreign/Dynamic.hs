@@ -9,7 +9,7 @@ import EasyTest
 import Foreign.C.String (peekCString, withCString)
 import Foreign.C.Types
 import Foreign.Marshal.Alloc (allocaBytes)
-import Foreign.Marshal.Array (withArray)
+import Foreign.Marshal.Array (peekArray, withArray)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr
 import Foreign.Storable
@@ -37,6 +37,20 @@ promotionTests =
 foreign import ccall unsafe "&snprintf" snprintfPtr :: FunPtr ()
 
 foreign import ccall unsafe "&strlen" strlenPtr :: FunPtr ()
+
+foreign import ccall unsafe "&qsort" qsortPtr :: FunPtr ()
+
+foreign import ccall "wrapper"
+  mkIntCompare ::
+    (Ptr CInt -> Ptr CInt -> IO CInt) ->
+    IO (FunPtr (Ptr CInt -> Ptr CInt -> IO CInt))
+
+-- Ascending integer comparator for qsort, returning -1/0/1.
+intCompare :: Ptr CInt -> Ptr CInt -> IO CInt
+intCompare a b = do
+  x <- peek a
+  y <- peek b
+  pure . fromIntegral $ fromEnum (compare x y) - 1
 
 data Argument = forall a. (Storable a) => Argument a
 
@@ -141,7 +155,34 @@ test =
               rejects BadVoid (FFSpec [I32, Void] I32 Nothing)
             ],
         scope "reject array results" $
-          rejects BadResult (FFSpec [I32] MBArr (Just 1))
+          rejects BadResult (FFSpec [I32] MBArr (Just 1)),
+        scope "accept function-pointer argument" do
+          actual <- io $ try $ void $ prepareSpec $ FFSpec [Fun, I32] I32 Nothing
+          expectEqual (Right () :: Either PrepException ()) actual,
+        scope "reject function-pointer result" $
+          rejects BadResult (FFSpec [I32] Fun Nothing),
+        scope "function-pointer argument is passed and invoked (qsort)" do
+          actual <- io do
+            cmp <- mkIntCompare intCompare
+            spec <- prepareSpec $ FFSpec [Ptr, sizeType, sizeType, Fun] Void Nothing
+            let fun = CDynFunc "qsort" spec qsortPtr
+                input = [5, 3, 8, 1, 9, 2] :: [CInt]
+                n = length input
+                elemSize = sizeOf (undefined :: CInt)
+            withArray input \arr ->
+              withArguments
+                [ Argument arr,
+                  Argument (fromIntegral n :: CSize),
+                  Argument (fromIntegral elemSize :: CSize),
+                  Argument cmp
+                ]
+                \args ->
+                  allocaBytes 8 \result -> do
+                    callForeign fun args result
+                    sorted <- peekArray n arr
+                    freeHaskellFunPtr cmp
+                    pure sorted
+          expectEqual [1, 2, 3, 5, 8, 9] actual
       ]
         <> promotionTests
   where
