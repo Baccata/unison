@@ -101,4 +101,4 @@ The format for this list: name, GitHub handle
 * Taylor Fausak (@tfausak)
 * Gabriel Anderson (@andgate)
 * Alistair Roche (@aroche-p)
-* Olivier Mélois (@baccata)
+* Olivier Mélois (@Baccata)
