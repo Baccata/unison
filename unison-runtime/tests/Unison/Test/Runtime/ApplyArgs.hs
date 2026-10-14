@@ -8,7 +8,7 @@
 -- callbacks). We compile a small Unison lambda, recover its runtime 'Val',
 -- apply it to argument values, and check the result — including an
 -- order-sensitive builtin so a reversed-argument bug would be caught.
-module Unison.Test.Runtime.ApplyArgs (test) where
+module Unison.Test.Runtime.ApplyArgs (test, compileVal) where
 
 import Control.Concurrent.STM (readTVarIO)
 import Data.IORef (newIORef, readIORef, writeIORef)

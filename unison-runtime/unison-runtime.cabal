@@ -59,6 +59,7 @@ library
       Unison.Runtime.Debug
       Unison.Runtime.Decompile
       Unison.Runtime.Exception
+      Unison.Runtime.Foreign.Callback
       Unison.Runtime.Foreign.Dynamic
       Unison.Runtime.Foreign.Function
       Unison.Runtime.Foreign.Function.Type
@@ -208,6 +209,7 @@ test-suite runtime-tests
       Unison.Test.Runtime.ApplyArgs
       Unison.Test.Runtime.Crypto.P256
       Unison.Test.Runtime.Crypto.Rsa
+      Unison.Test.Runtime.Foreign.Callback
       Unison.Test.Runtime.Foreign.Dynamic
       Unison.Test.Runtime.MCode
       Unison.Test.Runtime.MCode.Serialization
